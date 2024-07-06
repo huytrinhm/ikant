@@ -56,6 +56,36 @@ struct KANNet {
 	KANLayer *layers;
 };
 
+std::ostream& operator<<(std::ostream &os, const KANLayer &layer) {
+    os << "KANLayer:\n";
+    os << "\tin_features: " << layer.in_features << "\n";
+    os << "\tout_features: " << layer.out_features << "\n";
+    os << "\tcoeff: " << layer.coeff.dim << " (" << layer.coeff.shape[0] << ' ' << layer.coeff.shape[1] << ' ' << layer.coeff.shape[2] << ") at " << layer.coeff.data << "\n";
+    os << "\tcoeff_grad: " << layer.coeff_grad.dim << " (" << layer.coeff_grad.shape[0] << ' ' << layer.coeff_grad.shape[1] << ' ' << layer.coeff_grad.shape[2] << ") at " << layer.coeff_grad.data << "\n";
+    os << "\tbases: " << layer.bases.dim << " (" << layer.bases.shape[0] << ' ' << layer.bases.shape[1] << ") at " << layer.bases.data << "\n";
+    os << "\tbases_minus_1: " << layer.bases_minus_1.dim << " (" << layer.bases_minus_1.shape[0] << ' ' << layer.bases_minus_1.shape[1] << ") at " << layer.bases_minus_1.data << "\n";
+    os << "\tactivations: " << layer.activations.dim << " (" << layer.activations.shape[0] << ") at " << layer.activations.data << "\n";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream &os, const KANNet &net) {
+    os << "KANNet:\n";
+    os << "\tnum_layers: " << net.num_layers << "\n";
+    os << "\tspline_order: " << net.spline_order << "\n";
+    os << "\tparams_data: " << net.params_data << "\n";
+    os << "\tparams_grad_data: " << net.params_grad_data << "\n";
+    os << "\tactivations_data: " << net.activations_data << "\n";
+    os << "\tgrid: " << net.grid << "\n";
+    os << "\tbases_temp: " << net.bases_temp.dim << " (" << net.bases_temp.shape[0] << ' ' << net.bases_temp.shape[1] << ") at " << net.bases_temp.data << "\n";
+    os << "\tpartial_grad: " << net.partial_grad.dim << " (" << net.partial_grad.shape[0] << ") at " << net.partial_grad.data << "\n";
+
+    os << "===LAYERS===\n";
+    for (uint32_t l = 0; l < net.num_layers; ++l)
+    	os << net.layers[l] << "\n";
+    
+    return os;
+}
+
 void grid_init(Tensor &grid, uint32_t spline_order, uint32_t grid_size) {
 	uint32_t num_grid_points = grid_size + 2 * spline_order + 1;
 	grid = Tensor({num_grid_points}, new float[num_grid_points]);
@@ -128,7 +158,7 @@ KANNet KANNet_create(std::vector<uint32_t> widths, uint32_t spline_order, uint32
 
 		activations_size += out_features;
 
-		max_width = max(max_width, in_features);
+		max_width = std::max(max_width, in_features);
 	}
 
 	net.params_data = new float[params_size];
