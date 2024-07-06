@@ -189,5 +189,23 @@ KANNet KANNet_create(std::vector<uint32_t> widths, uint32_t spline_order, uint32
 	return net;
 }
 
+void KANLayer_neuron_forward(KANLayer &layer, Tensor &grid, uint32_t spline_order, uint32_t i) {
+
+}
+
+void KANLayer_forward(KANLayer &layer, Tensor &inputs, Tensor &grid, uint32_t spline_order, Tensor &bases_temp) {
+	std::cout << inputs.dim << " " << inputs.shape[0] << std::endl;
+	b_splines(grid, inputs, spline_order, &layer.bases, &bases_temp, &layer.bases_minus_1);
+	std::cout << layer.bases << std::endl;
+}
+
+void KANNet_forward(KANNet &net, Tensor &x) {
+	Tensor *inputs = &x;
+	for (uint32_t l = 0; l < net.num_layers; ++l) {
+		KANLayer_forward(net.layers[l], *inputs, net.grid, net.spline_order, net.bases_temp);
+		inputs = &net.layers[l].activations;
+	}
+}
+
 }
 #endif
