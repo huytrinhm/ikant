@@ -327,9 +327,9 @@ void KANNet_forward(KANNet &net, Tensor &x) {
 	}
 }
 
-void KANLayer_backward(KANLayer &layer, Tensor &inputs, Tensor *next_grad, Tensor &grid, uint32_t spline_order) {
+void KANLayer_backward(KANLayer &layer, Tensor &inputs, Tensor *next_grad, Tensor &grid, uint32_t spline_order, float lambda = 0.) {
 	for (uint32_t i = 0; i < layer.out_features; ++i) {
-		layer.biases_grad(i) += layer.partial_grad(i);
+		layer.biases_grad(i) += layer.partial_grad(i) - lambda;
 
 		for (uint32_t j = 0; j < layer.in_features; ++j) {
 			layer.basis_weights_grad(i, j) += layer.partial_grad(i) * layer.residuals(j);
@@ -349,21 +349,21 @@ void KANLayer_backward(KANLayer &layer, Tensor &inputs, Tensor *next_grad, Tenso
 
 	for (uint32_t j = 0; j < layer.in_features; ++j) {
 		for (uint32_t i = 0; i < layer.out_features; ++i) {
-			(*next_grad)(j) += layer.partial_grad(i) * layer.basis_weights(i, j) * SiLU_derivative(inputs(j));
+			(*next_grad)(j) += layer.partial_grad(i) * layer.basis_weights(i, j) * SiLU_derivative(inputs(j)) + lambda;
 		}
 	}
 }
 
-void KANNet_backward(KANNet &net, Tensor &x, Tensor &y) {
+void KANNet_backward(KANNet &net, Tensor &x, Tensor &y, float lambda = 0.) {
 	for (uint32_t i = 0; i < net.layers[net.num_layers - 1].out_features; ++i) {
-		net.layers[net.num_layers - 1].partial_grad(i) = 2 * (net.layers[net.num_layers - 1].activations(i) - y(i));
+		net.layers[net.num_layers - 1].partial_grad(i) = 2 * (net.layers[net.num_layers - 1].activations(i) - y(i)) + lambda;
 	}
 
 	for (uint32_t l = net.num_layers - 1; l > 0; --l) {
-		KANLayer_backward(net.layers[l], net.layers[l - 1].activations, &net.layers[l - 1].partial_grad, net.grid, net.spline_order);
+		KANLayer_backward(net.layers[l], net.layers[l - 1].activations, &net.layers[l - 1].partial_grad, net.grid, net.spline_order, lambda);
 	}
 
-	KANLayer_backward(net.layers[0], x, nullptr, net.grid, net.spline_order);
+	KANLayer_backward(net.layers[0], x, nullptr, net.grid, net.spline_order, lambda);
 }
 
 void KANNet_zero_grad(KANNet &net) {
@@ -381,15 +381,15 @@ float MSELoss(Tensor &output, Tensor &target) {
 	return accum;
 }
 
-float KANNet_run_epoch(KANNet &net, Tensor &X, Tensor &y, float lr) {
-    KANNet_zero_grad(net);
-    float epoch_loss = 0;
+float KANNet_run_epoch(KANNet &net, Tensor &X, Tensor &y, float lr, float lambda = 0.) {
+	KANNet_zero_grad(net);
+	float epoch_loss = 0;
 
 	for (uint32_t i = 0; i < X.shape[0]; ++i) {
 		Tensor sample(1, &X.shape[1], &X.stride[1], &X(i, 0));
 		Tensor gt(1, &y.shape[1], &y.stride[1], &y(i, 0));
 		KANNet_forward(net, sample);
-		KANNet_backward(net, sample, gt);
+		KANNet_backward(net, sample, gt, lambda);
 		epoch_loss += MSELoss(net.layers[net.num_layers - 1].activations, gt);
 	}
 
