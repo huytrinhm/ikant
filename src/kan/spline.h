@@ -39,7 +39,7 @@ void b_splines(Tensor& grid, Tensor& x, uint32_t spline_order, Tensor* bases, Te
 		}
 
 		for (uint32_t j = 0; j < in_features; ++j)
-			for (int32_t t = 0; t <= num_grid_points - k - 1; ++t)
+			for (int32_t t = 0; t < num_grid_points - k - 1; ++t)
 				(*current_bases)(j, t) = (
 					(
 						(x(j) - grid(t)) / (grid(t + k) - grid(t)) *
@@ -53,27 +53,26 @@ void b_splines(Tensor& grid, Tensor& x, uint32_t spline_order, Tensor* bases, Te
 	}
 }
 
-void b_splines_derivative(Tensor& grid, Tensor& bases_minus_1, Tensor& coeff, uint32_t spline_order, Tensor& grad, bool accumulate = true) {
-	uint32_t in_features = bases_minus_1.shape[1];
+void b_splines_derivative(Tensor& grid, Tensor& bases_minus_1, Tensor& coeff, Tensor& partial_grad, Tensor& spline_weights, uint32_t spline_order, Tensor& grad) {
+	uint32_t in_features = bases_minus_1.shape[0];
 	uint32_t out_features = coeff.shape[0];
-	uint32_t num_grid_points = grid.shape[1];
-	uint32_t num_bases = num_grid_points - spline_order - 1;
+	uint32_t num_grid_points = grid.shape[0];
+	uint32_t num_bases = num_grid_points - spline_order;
 
 	for (uint32_t j = 0; j < in_features; ++j) {
-		float accumulator = 0;
-		for (uint32_t k = 0; k < out_features; ++k)
+		for (uint32_t k = 0; k < out_features; ++k) {
+			float accumulator = 0;
 			for (uint32_t t = 0; t < num_bases; ++t)
 				accumulator += coeff(k, j, t) * (
-					bases_minus_1(j, t) / (grid(j, t + spline_order) - grid(j, t)) -
-					bases_minus_1(j, t + 1) / (grid(j, t + spline_order + 1) - grid(j, t + 1))
+					bases_minus_1(j, t) / (grid(t + spline_order) - grid(t)) -
+					bases_minus_1(j, t + 1) / (grid(t + spline_order + 1) - grid(t + 1))
 				);
-		if (!accumulate)
-			grad(j) = 0;
-		grad(j) += spline_order * accumulator;
+			grad(j) = spline_order * accumulator * partial_grad(k) * spline_weights(k, j);
+		}
 	}
 }
 
-Tensor b_splines(Tensor& grid, Tensor& Xs, uint32_t spline_order, Tensor& coeff) {
+Tensor test_b_splines(Tensor& grid, Tensor& Xs, uint32_t spline_order, Tensor& coeff) {
 	if (spline_order <= 1) {
 		std::cerr << "spline_order must larger than 1." << std::endl;
 		throw;
@@ -100,7 +99,7 @@ Tensor b_splines(Tensor& grid, Tensor& Xs, uint32_t spline_order, Tensor& coeff)
 		Tensor x({in_features}, &Xs(i, 0));
 
 		b_splines(grid, x, spline_order, &bases, &bases_temp, &bases_minus_1);
-		b_splines_derivative(grid, bases_minus_1, coeff, spline_order, grad);
+		// b_splines_derivative(grid, bases_minus_1, coeff, spline_order, grad);
 	}
 
 	return grad;

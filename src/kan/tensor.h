@@ -30,7 +30,12 @@ struct Tensor {
         }
     }
 
-    Tensor(std::initializer_list<uint32_t> shape_init, float *data = nullptr) : data(data) {
+    // ~Tensor() {
+    //     delete[] shape;
+    //     delete[] stride;
+    // }
+
+    Tensor(std::initializer_list<uint32_t> shape_init, float *data) : data(data) {
         dim = shape_init.size();
 
         shape = new uint32_t[dim];
@@ -40,6 +45,24 @@ struct Tensor {
         stride[dim - 1] = 1;
         for (int32_t i = dim - 2; i >= 0; --i)
             stride[i] = stride[i + 1] * shape[i + 1];
+    }
+
+    Tensor(std::initializer_list<uint32_t> shape_init) {
+        dim = shape_init.size();
+
+        shape = new uint32_t[dim];
+        std::copy(shape_init.begin(), shape_init.end(), shape);
+
+        stride = new uint32_t[dim];
+        stride[dim - 1] = 1;
+        for (int32_t i = dim - 2; i >= 0; --i)
+            stride[i] = stride[i + 1] * shape[i + 1];
+
+        uint32_t size = 1;
+        for (uint32_t i = 0; i < dim; ++i)
+            size *= shape[i];
+
+        data = new float[size];
     }
 
     void print_tensor_data(std::ostream &os, uint32_t _dim, uint32_t *shape, uint32_t *stride, float *data) const {
@@ -52,8 +75,8 @@ struct Tensor {
         os << indent << "[";
         if (_dim == 1) {
             for (uint32_t i = 0; i < *shape - 1; ++i)
-                os << std::format("{: .2f}", data[i]) << ", ";
-            os << std::format("{: .2f}", data[*shape - 1]) << "]";
+                os << std::format("{: .4f}", data[i]) << ", ";
+            os << std::format("{: .4f}", data[*shape - 1]) << "]";
             return;
         }
 
