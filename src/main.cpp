@@ -14,6 +14,7 @@ const float canvasRatio = 0.7f;
 const uint32_t splineNumPoints = 20;
 
 KAN::KANNet net;
+KAN::Tensor X, y;
 
 enum KANGUIState { MENU, EDIT, TRAIN };
 
@@ -376,8 +377,10 @@ void DrawMenuGUI(float panelWidth,
   GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
             "Load Checkpoint");
   panelY += 50;
-  GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
-            "Train Network");
+  if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+                "Train Network")) {
+    kanGuiState = TRAIN;
+  }
   panelY += 50;
 }
 
@@ -462,6 +465,89 @@ void DrawEditGUI(float panelWidth,
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Discard Changes"))
     kanGuiState = MENU;
+  panelY += 50;
+}
+
+void DrawTrainGUI(float panelWidth,
+                  float panelX,
+                  float panelY,
+                  KANGUIState& kanGuiState) {
+  if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+                "Load Data")) {
+    X = KAN::tensor_from_file("x.dat");
+    y = KAN::tensor_from_file("y.dat");
+  }
+  panelY += 50;
+
+  std::string dataStr = "Data: ";
+  if (X.dim)
+    dataStr += std::to_string(X.shape[0]) + " samples, " +
+               std::to_string(X.shape[1]) + " features";
+  else
+    dataStr += "<Not loaded>";
+  GuiLabel(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+           dataStr.c_str());
+  panelY += 50;
+
+  // Variables to hold the input values
+  static float lr = 0.01f;
+  static bool lrEditMode = false;
+  static char lrTextValue[32] = {'0', '.', '0', '1', 0};
+
+  static float lambda = 0.0f;
+  static bool lambdaEditMode = false;
+  static char lambdaTextValue[32] = {'0', 0};
+
+  static int epoch = 100;
+  static bool epochEditMode = false;
+
+  // Input fields for lr, lambda, and epoch
+  GuiLabel(Rectangle{panelX + 10, panelY, 160, 40}, "Learning Rate:");
+  if (GuiValueBoxFloat(Rectangle{panelX + 180, panelY, 100, 40}, nullptr,
+                       lrTextValue, &lr, lrEditMode)) {
+    lrEditMode = !lrEditMode;
+  }
+  panelY += 50;
+
+  GuiLabel(Rectangle{panelX + 10, panelY, 160, 40}, "Lambda:");
+  if (GuiValueBoxFloat(Rectangle{panelX + 180, panelY, 100, 40}, nullptr,
+                       lambdaTextValue, &lambda, lambdaEditMode)) {
+    lambdaEditMode = !lambdaEditMode;
+  }
+  panelY += 50;
+
+  GuiLabel(Rectangle{panelX + 10, panelY, 160, 40}, "Epoch:");
+  if (GuiValueBox(Rectangle{panelX + 180, panelY, 100, 40}, nullptr, &epoch, 1,
+                  10000, epochEditMode)) {
+    epochEditMode = !epochEditMode;
+  }
+  panelY += 50;
+
+  if (!X.dim)
+    GuiDisable();
+  // TODO: Implement training using lr, lambda, and epochs
+  if (GuiButton(Rectangle{panelX + 10, panelY, (panelWidth - 30) / 2, 40},
+                "Run one epoch")) {
+  }
+  if (GuiButton(Rectangle{panelX + panelWidth / 2 + 5, panelY,
+                          (panelWidth - 30) / 2, 40},
+                "Train")) {
+  }
+  panelY += 50;
+  GuiEnable();
+
+  GuiLabel(Rectangle{panelX + 10, panelY, panelX - 20, 40},
+           "Epoch: 0 - Loss: <Not training>");
+  panelY += 50;
+  float progress = 0.5f;
+  GuiProgressBar(Rectangle{panelX + 10, panelY, panelWidth - 20, 30}, nullptr,
+                 nullptr, &progress, 0, 1);
+  panelY += 40;
+
+  if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+                "Back to Menu")) {
+    kanGuiState = MENU;
+  }
   panelY += 50;
 }
 
@@ -583,6 +669,10 @@ int main() {
         break;
       case EDIT:
         DrawEditGUI(panelWidth, panelX, panelY, kanGuiState, net);
+        break;
+      case TRAIN:
+        DrawTrainGUI(panelWidth, panelX, panelY, kanGuiState);
+        break;
       default:
         break;
     }
