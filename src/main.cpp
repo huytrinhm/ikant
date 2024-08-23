@@ -1,4 +1,6 @@
 #include <iostream>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include "raylib.h"
 #include "raymath.h"
@@ -32,6 +34,7 @@ struct EditState {
 std::vector<std::vector<std::vector<std::vector<float>>>> splinesData;
 std::vector<std::vector<float>> min_act;
 std::vector<std::vector<float>> max_act;
+std::mutex splinesDataMutex;
 
 EditState editState;
 
@@ -257,6 +260,7 @@ RenderTexture DrawSineCurveToTexture(int textureWidth, int textureHeight) {
 }
 
 void DrawSpline(Rectangle bound, uint32_t l, uint32_t i, uint32_t j) {
+  splinesDataMutex.lock();
   float x = bound.x + 4;
   float y = bound.y + 4;
   float w = bound.width - 8;
@@ -286,6 +290,7 @@ void DrawSpline(Rectangle bound, uint32_t l, uint32_t i, uint32_t j) {
     // Draw line between the two points
     DrawLineEx(Vector2{currentX, currentY}, Vector2{nextX, nextY}, 3, RED);
   }
+  splinesDataMutex.unlock();
 }
 
 void CalcSplineData(KAN::KANNet& net) {
@@ -468,6 +473,42 @@ void DrawEditGUI(float panelWidth,
   panelY += 50;
 }
 
+float loss = -1;
+std::thread trainThread;
+std::atomic<bool> training(false);
+std::atomic<int> currentEpoch(0);
+
+void RunOneEpoch(float lr, float lambda) {
+  KAN::KANNet_zero_grad(net);
+  float epoch_loss = 0;
+
+  for (uint32_t i = 0; i < X.shape[0]; ++i) {
+    KAN::Tensor sample(1, &X.shape[1], &X.stride[1], &X(i, 0));
+    KAN::Tensor gt(1, &y.shape[1], &y.stride[1], &y(i, 0));
+    KANNet_forward(net, sample);
+    KANNet_backward(net, sample, gt, lambda);
+    epoch_loss += MSELoss(net.layers[net.num_layers - 1].activations, gt);
+    KAN::KANNet_get_spline_range(net, sample, min_act, max_act, i == 0);
+  }
+
+  std::lock_guard<std::mutex> guard(splinesDataMutex);
+  CalcSplineData(net);
+
+  for (uint32_t i = 0; i < net.num_params; i++) {
+    net.params_data[i] -= lr * net.params_grad_data[i] / X.shape[0];
+  }
+
+  loss = epoch_loss / X.shape[0];
+}
+
+void RunTraining(float lr, float lambda, int epoch) {
+  training = true;
+  for (; currentEpoch < epoch && training; currentEpoch++) {
+    RunOneEpoch(lr, lambda);
+  }
+  training = false;
+}
+
 void DrawTrainGUI(float panelWidth,
                   float panelX,
                   float panelY,
@@ -523,26 +564,52 @@ void DrawTrainGUI(float panelWidth,
   }
   panelY += 50;
 
-  if (!X.dim)
+  if (!X.dim || training)
     GuiDisable();
-  // TODO: Implement training using lr, lambda, and epochs
   if (GuiButton(Rectangle{panelX + 10, panelY, (panelWidth - 30) / 2, 40},
                 "Run one epoch")) {
+    if (trainThread.joinable())
+      trainThread.join();
+    trainThread = std::thread(RunOneEpoch, lr, lambda);
   }
+  GuiEnable();
+
+  if (!X.dim)
+    GuiDisable();
   if (GuiButton(Rectangle{panelX + panelWidth / 2 + 5, panelY,
                           (panelWidth - 30) / 2, 40},
-                "Train")) {
+                training ? "Pause" : "Train")) {
+    if (training) {
+      training = false;
+      if (trainThread.joinable())
+        trainThread.join();
+    } else {
+      if (trainThread.joinable())
+        trainThread.join();
+      trainThread = std::thread(RunTraining, lr, lambda, epoch);
+    }
   }
   panelY += 50;
   GuiEnable();
 
-  GuiLabel(Rectangle{panelX + 10, panelY, panelX - 20, 40},
-           "Epoch: 0 - Loss: <Not training>");
+  std::string infoStr = "Epoch: " + std::to_string(currentEpoch) + " - Loss: ";
+  if (loss < 0)
+    infoStr += "<Not training>";
+  else
+    infoStr += std::format("{:.4f}", loss);
+
+  GuiLabel(Rectangle{panelX + 10, panelY, panelX - 20, 40}, infoStr.c_str());
   panelY += 50;
-  float progress = 0.5f;
+  float progress = currentEpoch / (float)epoch;
   GuiProgressBar(Rectangle{panelX + 10, panelY, panelWidth - 20, 30}, nullptr,
                  nullptr, &progress, 0, 1);
   panelY += 40;
+
+  if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+                "Save Checkpoint")) {
+    // TODO: Implement saving the checkpoint
+  }
+  panelY += 50;
 
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Back to Menu")) {

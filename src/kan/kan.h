@@ -438,18 +438,21 @@ float MSELoss(Tensor& output, Tensor& target) {
 void KANNet_get_spline_range(KANNet& net,
                              Tensor& X,
                              std::vector<std::vector<float>>& min_act,
-                             std::vector<std::vector<float>>& max_act) {
+                             std::vector<std::vector<float>>& max_act,
+                             bool reset = false) {
   for (uint32_t i = 0; i < X.shape[0]; ++i) {
-    min_act[0][i] = std::min(min_act[0][i], X(i));
-    max_act[0][i] = std::max(max_act[0][i], X(i));
+    min_act[0][i] = reset ? X(i) : std::min(min_act[0][i], X(i));
+    max_act[0][i] = reset ? X(i) : std::max(max_act[0][i], X(i));
   }
 
   for (uint32_t l = 0; l < net.num_layers; ++l) {
     for (uint32_t i = 0; i < net.layers[l].out_features; ++i) {
       min_act[l + 1][i] =
-          std::min(min_act[l + 1][i], net.layers[l].activations(i));
+          reset ? net.layers[l].activations(i)
+                : std::min(min_act[l + 1][i], net.layers[l].activations(i));
       max_act[l + 1][i] =
-          std::max(max_act[l + 1][i], net.layers[l].activations(i));
+          reset ? net.layers[l].activations(i)
+                : std::max(max_act[l + 1][i], net.layers[l].activations(i));
     }
   }
 }
