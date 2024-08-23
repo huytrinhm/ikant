@@ -18,6 +18,11 @@ const uint32_t splineNumPoints = 20;
 KAN::KANNet net;
 KAN::Tensor X, y;
 
+float loss = -1;
+std::thread trainThread;
+std::atomic<bool> training(false);
+std::atomic<int> currentEpoch(0);
+
 enum KANGUIState { MENU, EDIT, TRAIN };
 
 struct Node {
@@ -74,6 +79,9 @@ void InitKANNet() {
       }
     }
   }
+
+  currentEpoch = 0;
+  loss = -1;
 
   CalcSplineData(net);
 }
@@ -379,8 +387,16 @@ void DrawMenuGUI(float panelWidth,
         net.layers[net.num_layers - 1].out_features;
   }
   panelY += 50;
-  GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
-            "Load Checkpoint");
+  if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
+                "Load Checkpoint")) {
+    uint32_t num_layers, spline_order, grid_size, *widths;
+    float* params_data;
+    KAN::KANNet_load_checkpoint("checkpoint2.dat", num_layers, spline_order,
+                                grid_size, widths, params_data);
+    net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
+                             spline_order, grid_size, params_data);
+    InitKANNet();
+  }
   panelY += 50;
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Train Network")) {
@@ -472,11 +488,6 @@ void DrawEditGUI(float panelWidth,
     kanGuiState = MENU;
   panelY += 50;
 }
-
-float loss = -1;
-std::thread trainThread;
-std::atomic<bool> training(false);
-std::atomic<int> currentEpoch(0);
 
 void RunOneEpoch(float lr, float lambda) {
   KAN::KANNet_zero_grad(net);
@@ -613,6 +624,9 @@ void DrawTrainGUI(float panelWidth,
 
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Back to Menu")) {
+    training = false;
+    if (trainThread.joinable())
+      trainThread.join();
     kanGuiState = MENU;
   }
   panelY += 50;
