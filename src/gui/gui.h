@@ -49,12 +49,15 @@ bool IsMouseOverRectangle(Vector2 mousePosition,
 void CalcSplineData(
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
-    std::vector<std::vector<float>>& max_act);
+    std::vector<std::vector<float>>& max_act,
+    bool updateAlpha);
 
 void InitKANNet(
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::atomic<int>& currentEpoch,
@@ -69,6 +72,7 @@ void InitKANNet(
   editState.grid_size = net.grid.shape[0] - 2 * net.spline_order - 1;
 
   splinesData.resize(net.num_layers);
+  splinesAlpha.resize(net.num_layers);
   min_act.resize(net.num_layers + 1);
   max_act.resize(net.num_layers + 1);
   min_act[0].assign(net.layers[0].in_features, -1);
@@ -77,8 +81,10 @@ void InitKANNet(
     min_act[l + 1].assign(net.layers[l].out_features, -1);
     max_act[l + 1].assign(net.layers[l].out_features, 1);
     splinesData[l].resize(net.layers[l].out_features);
+    splinesAlpha[l].resize(net.layers[l].out_features);
     for (uint32_t j = 0; j < net.layers[l].out_features; j++) {
       splinesData[l][j].resize(net.layers[l].in_features);
+      splinesAlpha[l][j].assign(net.layers[l].in_features, 1);
       for (uint32_t i = 0; i < net.layers[l].in_features; i++) {
         splinesData[l][j][i].resize(splineNumPoints);
       }
@@ -88,7 +94,7 @@ void InitKANNet(
   currentEpoch = 0;
   loss = -1;
 
-  CalcSplineData(net, splinesData, min_act, max_act);
+  CalcSplineData(net, splinesData, splinesAlpha, min_act, max_act, false);
 }
 
 std::vector<std::vector<Node>> InitKANCanvas(std::vector<int>& widths,
@@ -163,6 +169,7 @@ std::vector<std::vector<Node>> InitKANCanvas(KAN::KANNet& net,
 }
 
 void DrawKANNet(std::vector<std::vector<Node>>& layers,
+                std::vector<std::vector<std::vector<float>>>& splinesAlpha,
                 Camera2D& camera,
                 Vector2 mousePosition) {
   // Draw connections
@@ -171,14 +178,27 @@ void DrawKANNet(std::vector<std::vector<Node>>& layers,
     int nextWidth = layers[2 * i + 2].size();
     for (int j = 0; j < curWidth; j++) {
       for (int k = 0; k < nextWidth; k++) {
+        // std::cout << splinesAlpha[i][k][j] << std::endl;
         DrawLineEx(layers[2 * i][j].position,
                    Vector2Add(layers[2 * i + 1][j * nextWidth + k].position,
                               Vector2{0, squareSize / 2}),
-                   lineThickness * 1.5, BLACK);
+                   lineThickness * 1.5,
+                   Color{
+                       0,
+                       0,
+                       0,
+                       (unsigned char)(255 * splinesAlpha[i][k][j]),
+                   });
         DrawLineEx(
             Vector2Subtract(layers[2 * i + 1][j * nextWidth + k].position,
                             Vector2{0, squareSize / 2}),
-            layers[2 * i + 2][k].position, lineThickness * 1.5, BLACK);
+            layers[2 * i + 2][k].position, lineThickness * 1.5,
+            Color{
+                0,
+                0,
+                0,
+                (unsigned char)(255 * splinesAlpha[i][k][j]),
+            });
       }
     }
   }
@@ -192,13 +212,30 @@ void DrawKANNet(std::vector<std::vector<Node>>& layers,
         DrawCircleV(node.position, 15, BLACK);  // Increased circle size
       } else {
         // Draw the square with a white fill and black border
-        DrawRectangle(node.position.x - squareSize / 2,
-                      node.position.y - squareSize / 2, squareSize, squareSize,
-                      WHITE);
-        DrawRectangleLinesEx((Rectangle){node.position.x - squareSize / 2,
-                                         node.position.y - squareSize / 2,
-                                         squareSize, squareSize},
-                             lineThickness, BLACK);
+        DrawRectangle(
+            node.position.x - squareSize / 2, node.position.y - squareSize / 2,
+            squareSize, squareSize,
+            Color{
+                255,
+                255,
+                255,
+                (unsigned char)(255 *
+                                splinesAlpha[i / 2][j % layers[i + 1].size()]
+                                            [j / layers[i + 1].size()]),
+            });
+        DrawRectangleLinesEx(
+            (Rectangle){node.position.x - squareSize / 2,
+                        node.position.y - squareSize / 2, squareSize,
+                        squareSize},
+            lineThickness,
+            Color{
+                0,
+                0,
+                0,
+                (unsigned char)(255 *
+                                splinesAlpha[i / 2][j % layers[i + 1].size()]
+                                            [j / layers[i + 1].size()]),
+            });
         // Check for click on this square
         Vector2 worldMousePosition =
             Vector2Subtract(mousePosition, camera.offset);
@@ -278,6 +315,7 @@ void DrawSpline(
     uint32_t i,
     uint32_t j,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::mutex& splinesDataMutex) {
@@ -309,16 +347,25 @@ void DrawSpline(
         y + h - (splinesData[l][j][i][k + 1] - minY) / (maxY - minY) * h;
 
     // Draw line between the two points
-    DrawLineEx(Vector2{currentX, currentY}, Vector2{nextX, nextY}, 3, RED);
+    DrawLineEx(
+        Vector2{currentX, currentY}, Vector2{nextX, nextY}, 3,
+        Color{230, 41, 55, (unsigned char)(splinesAlpha[l][j][i] * 255)});
   }
   splinesDataMutex.unlock();
+}
+
+float scoreToAlpha(float score) {
+  float alpha = std::tanh(1.5 * score);
+  return alpha;
 }
 
 void CalcSplineData(
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
-    std::vector<std::vector<float>>& max_act) {
+    std::vector<std::vector<float>>& max_act,
+    bool updateAlpha) {
   for (uint32_t l = 0; l < net.num_layers; l++) {
     KAN::Tensor X({splineNumPoints, net.layers[l].in_features});
     for (uint32_t i = 0; i < net.layers[l].in_features; i++)
@@ -351,6 +398,10 @@ void CalcSplineData(
               net.layers[l].basis_weights(j, i) *
                   KAN::SiLU(X(k * net.layers[l].in_features + i));
         }
+
+        if (updateAlpha)  // Update alpha values
+          splinesAlpha[l][j][i] =
+              scoreToAlpha(net.layers[l].edge_activations(j, i));
       }
     }
   }
@@ -360,6 +411,7 @@ void DrawKANSplines(
     std::vector<std::vector<Node>>& layers,
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::mutex& splinesDataMutex) {
@@ -387,7 +439,8 @@ void DrawKANSplines(
         //     lineThickness, BLACK);
 
         DrawSpline((Rectangle){position.x, position.y, squareSize, squareSize},
-                   l, i, j, splinesData, min_act, max_act, splinesDataMutex);
+                   l, i, j, splinesData, splinesAlpha, min_act, max_act,
+                   splinesDataMutex);
       }
     }
   }
@@ -396,6 +449,7 @@ void DrawKANSplines(
 void HandleLoadCheckpoint(
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::atomic<int>& currentEpoch,
@@ -410,7 +464,8 @@ void HandleLoadCheckpoint(
                               widths, params_data);
   net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
                            spline_order, grid_size, params_data);
-  InitKANNet(net, splinesData, min_act, max_act, currentEpoch, loss);
+  InitKANNet(net, splinesData, splinesAlpha, min_act, max_act, currentEpoch,
+             loss);
 }
 
 void DrawMenuGUI(
@@ -420,6 +475,7 @@ void DrawMenuGUI(
     KANGUIState& kanGuiState,
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::atomic<int>& currentEpoch,
@@ -439,8 +495,8 @@ void DrawMenuGUI(
   panelY += 50;
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Load Checkpoint")) {
-    HandleLoadCheckpoint(net, splinesData, min_act, max_act, currentEpoch,
-                         loss);
+    HandleLoadCheckpoint(net, splinesData, splinesAlpha, min_act, max_act,
+                         currentEpoch, loss);
   }
   panelY += 50;
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
@@ -457,6 +513,7 @@ void DrawEditGUI(
     KANGUIState& kanGuiState,
     KAN::KANNet& net,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::atomic<int>& currentEpoch,
@@ -529,7 +586,8 @@ void DrawEditGUI(
                                           editState.widths.end());
     net = KAN::KANNet_create(convertedWidths, editState.spline_order,
                              editState.grid_size);
-    InitKANNet(net, splinesData, min_act, max_act, currentEpoch, loss);
+    InitKANNet(net, splinesData, splinesAlpha, min_act, max_act, currentEpoch,
+               loss);
     kanGuiState = MENU;
   }
   panelY += 50;
@@ -546,12 +604,17 @@ void RunOneEpoch(
     KAN::KANNet& net,
     float& loss,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::mutex& splinesDataMutex,
     KAN::Tensor& X,
     KAN::Tensor& y) {
   KAN::KANNet_zero_grad(net);
+  for (uint32_t l = 0; l < net.num_layers; l++)
+    for (uint32_t i = 0; i < net.layers[l].out_features; i++)
+      for (uint32_t j = 0; j < net.layers[l].in_features; j++)
+        net.layers[l].edge_activations(i, j) = 0;
   float epoch_loss = 0;
 
   for (uint32_t i = 0; i < X.shape[0]; ++i) {
@@ -563,8 +626,13 @@ void RunOneEpoch(
     KAN::KANNet_get_spline_range(net, sample, min_act, max_act, i == 0);
   }
 
+  for (uint32_t l = 0; l < net.num_layers; l++)
+    for (uint32_t i = 0; i < net.layers[l].out_features; i++)
+      for (uint32_t j = 0; j < net.layers[l].in_features; j++)
+        net.layers[l].edge_activations(i, j) /= X.shape[0];
+
   std::lock_guard<std::mutex> guard(splinesDataMutex);
-  CalcSplineData(net, splinesData, min_act, max_act);
+  CalcSplineData(net, splinesData, splinesAlpha, min_act, max_act, true);
 
   for (uint32_t i = 0; i < net.num_params; i++) {
     net.params_data[i] -= lr * net.params_grad_data[i] / X.shape[0];
@@ -582,6 +650,7 @@ void RunTraining(
     KAN::KANNet& net,
     float& loss,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::mutex& splinesDataMutex,
@@ -589,8 +658,8 @@ void RunTraining(
     KAN::Tensor& y) {
   training = true;
   for (; currentEpoch < epoch && training; currentEpoch++) {
-    RunOneEpoch(lr, lambda, net, loss, splinesData, min_act, max_act,
-                splinesDataMutex, X, y);
+    RunOneEpoch(lr, lambda, net, loss, splinesData, splinesAlpha, min_act,
+                max_act, splinesDataMutex, X, y);
   }
   training = false;
 }
@@ -626,6 +695,7 @@ void DrawTrainGUI(
     std::atomic<int>& currentEpoch,
     std::thread& trainThread,
     std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<std::vector<float>>>& splinesAlpha,
     std::vector<std::vector<float>>& min_act,
     std::vector<std::vector<float>>& max_act,
     std::mutex& splinesDataMutex) {
@@ -687,7 +757,8 @@ void DrawTrainGUI(
       trainThread.join();
     trainThread =
         std::thread(RunOneEpoch, lr, lambda, std::ref(net), std::ref(loss),
-                    std::ref(splinesData), std::ref(min_act), std::ref(max_act),
+                    std::ref(splinesData), std::ref(splinesAlpha),
+                    std::ref(min_act), std::ref(max_act),
                     std::ref(splinesDataMutex), std::ref(X), std::ref(y));
   }
   GuiEnable();
@@ -704,11 +775,12 @@ void DrawTrainGUI(
     } else {
       if (trainThread.joinable())
         trainThread.join();
-      trainThread = std::thread(
-          RunTraining, lr, lambda, epoch, std::ref(training),
-          std::ref(currentEpoch), std::ref(net), std::ref(loss),
-          std::ref(splinesData), std::ref(min_act), std::ref(max_act),
-          std::ref(splinesDataMutex), std::ref(X), std::ref(y));
+      trainThread =
+          std::thread(RunTraining, lr, lambda, epoch, std::ref(training),
+                      std::ref(currentEpoch), std::ref(net), std::ref(loss),
+                      std::ref(splinesData), std::ref(splinesAlpha),
+                      std::ref(min_act), std::ref(max_act),
+                      std::ref(splinesDataMutex), std::ref(X), std::ref(y));
     }
   }
   panelY += 50;

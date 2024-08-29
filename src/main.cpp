@@ -10,6 +10,7 @@ std::atomic<bool> training(false);
 std::atomic<int> currentEpoch(0);
 
 std::vector<std::vector<std::vector<std::vector<float>>>> splinesData;
+std::vector<std::vector<std::vector<float>>> splinesAlpha;
 std::vector<std::vector<float>> min_act;
 std::vector<std::vector<float>> max_act;
 std::mutex splinesDataMutex;
@@ -21,7 +22,8 @@ int main() {
                               grid_size, widths, params_data);
   net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
                            spline_order, grid_size, params_data);
-  InitKANNet(net, splinesData, min_act, max_act, currentEpoch, loss);
+  InitKANNet(net, splinesData, splinesAlpha, min_act, max_act, currentEpoch,
+             loss);
 
   // Initialization
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -96,9 +98,9 @@ int main() {
     BeginDrawing();
     ClearBackground(RAYWHITE);
     BeginMode2D(camera);
-    DrawKANNet(layers, camera, mousePosition);
+    DrawKANNet(layers, splinesAlpha, camera, mousePosition);
     if (kanGuiState != EDIT)
-      DrawKANSplines(layers, net, splinesData, min_act, max_act,
+      DrawKANSplines(layers, net, splinesData, splinesAlpha, min_act, max_act,
                      splinesDataMutex);
     EndMode2D();
 
@@ -130,16 +132,16 @@ int main() {
     switch (kanGuiState) {
       case MENU:
         DrawMenuGUI(panelWidth, panelX, panelY, kanGuiState, net, splinesData,
-                    min_act, max_act, currentEpoch, loss);
+                    splinesAlpha, min_act, max_act, currentEpoch, loss);
         break;
       case EDIT:
         DrawEditGUI(panelWidth, panelX, panelY, kanGuiState, net, splinesData,
-                    min_act, max_act, currentEpoch, loss);
+                    splinesAlpha, min_act, max_act, currentEpoch, loss);
         break;
       case TRAIN:
         DrawTrainGUI(panelWidth, panelX, panelY, kanGuiState, net, X, y,
                      training, loss, currentEpoch, trainThread, splinesData,
-                     min_act, max_act, splinesDataMutex);
+                     splinesAlpha, min_act, max_act, splinesDataMutex);
         break;
       default:
         break;

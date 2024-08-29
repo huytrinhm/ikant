@@ -26,10 +26,11 @@ struct KANLayer {
   Tensor biases_grad;
 
   // saved data from forward pass
-  Tensor bases;          // in * bases
-  Tensor bases_minus_1;  // in * (bases - 1)
-  Tensor splines;        // out * in
-  Tensor residuals;      // in
+  Tensor bases;             // in * bases
+  Tensor bases_minus_1;     // in * (bases - 1)
+  Tensor splines;           // out * in
+  Tensor residuals;         // in
+  Tensor edge_activations;  // out * in
 
   Tensor activations;   // out
   Tensor partial_grad;  // out

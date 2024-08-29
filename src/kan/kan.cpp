@@ -104,6 +104,7 @@ void KANLayer_init(KANLayer& layer,
   layer.bases = Tensor({in_features, num_bases});
   layer.bases_minus_1 = Tensor({in_features, num_bases + 1});
   layer.splines = Tensor({out_features, in_features});
+  layer.edge_activations = Tensor({out_features, in_features});
   layer.residuals = Tensor({in_features});
   layer.partial_grad = Tensor({out_features});
 
@@ -234,8 +235,8 @@ void KANNet_weight_init(KANNet& net) {
       }
     }
 
-    std::cout << layer.basis_weights << std::endl;
-    std::cout << layer.spline_weights << std::endl;
+    // std::cout << layer.basis_weights << std::endl;
+    // std::cout << layer.spline_weights << std::endl;
     // std::cout << bases << std::endl;
     // std::cout << layer.coeff << std::endl;
 
@@ -351,8 +352,10 @@ void KANLayer_neuron_forward(KANLayer& layer,
       layer.splines(i, j) += layer.coeff(i, j, b) * layer.bases(j, b);
     }
 
-    layer.activations(i) += layer.spline_weights(i, j) * layer.splines(i, j) +
-                            layer.basis_weights(i, j) * layer.residuals(j);
+    float edge_act = layer.spline_weights(i, j) * layer.splines(i, j) +
+                     layer.basis_weights(i, j) * layer.residuals(j);
+    layer.edge_activations(i, j) += std::fabs(edge_act);
+    layer.activations(i) += edge_act;
   }
 
   layer.activations(i) += layer.biases(i);
