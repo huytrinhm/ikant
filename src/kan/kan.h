@@ -40,6 +40,7 @@ struct KANNet {
   uint32_t num_layers;
   uint32_t spline_order;
   uint32_t num_params;
+  uint32_t grid_size;
 
   // pre-allocated memory
   float* params_data;

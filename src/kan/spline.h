@@ -10,8 +10,7 @@ namespace KAN {
 Compute the B-spline bases for the given sample.
 
 Args:
-  - grid (Tensor): Grid tensor of shape (in_features, grid_size + 2 *
-spline_order + 1).
+  - grid (Tensor): Grid tensor of shape (grid_size + 2 * spline_order + 1).
   - x (Tensor): Input tensor of shape (in_features).
   - spline_order (int): Spline order.
 

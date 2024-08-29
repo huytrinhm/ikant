@@ -1,9 +1,12 @@
 #include "kan.h"
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include "lapacke.h"
 #include "spline.h"
 #include "tensor.h"
 
@@ -159,7 +162,7 @@ void KANNet_save_checkpoint(KANNet& net, const char* filename) {
     throw;
   }
 
-  uint32_t grid_size = net.grid.shape[0] - (2 * net.spline_order + 1);
+  uint32_t grid_size = net.grid_size;
 
   fout.write(reinterpret_cast<char*>(&net.num_layers), sizeof(uint32_t));
   fout.write(reinterpret_cast<char*>(&net.spline_order), sizeof(uint32_t));
@@ -181,9 +184,71 @@ void KANNet_save_checkpoint(KANNet& net, const char* filename) {
   fout.close();
 }
 
+float random_uniform(float limit) {
+  return (static_cast<float>(std::rand()) / RAND_MAX) * 2 * limit - limit;
+}
+
+float invSqrt(float number) {
+  union {
+    float f;
+    uint32_t i;
+  } conv;
+
+  float x2;
+  const float threehalfs = 1.5F;
+
+  x2 = number * 0.5F;
+  conv.f = number;
+  conv.i = 0x5f3759df - (conv.i >> 1);
+  conv.f = conv.f * (threehalfs - (x2 * conv.f * conv.f));
+  return conv.f;
+}
+
 void KANNet_weight_init(KANNet& net) {
-  for (uint32_t i = 0; i < net.num_params; i++)
-    net.params_data[i] = 1;
+  uint32_t num_bases = net.grid_size + net.spline_order;
+  float spline_noise = 0.5 * 0.1 / net.grid_size;
+
+  Tensor bases({num_bases, num_bases});
+  Tensor bases_temp({num_bases, net.grid_size + 2 * net.spline_order});
+
+  Tensor x({num_bases});
+  float h = (GRID_MAX - GRID_MIN) / (num_bases - 1);
+  x(0) = GRID_MIN;
+  for (uint32_t i = 1; i < num_bases; ++i)
+    x(i) = x(i - 1) + h;
+
+  for (uint32_t l = 0; l < net.num_layers; l++) {
+    KANLayer& layer = net.layers[l];
+
+    b_splines(net.grid, x, net.spline_order, &bases, &bases_temp, nullptr);
+
+    for (uint32_t i = 0; i < layer.in_features; i++) {
+      float inv_sqrt_in_features = invSqrt(layer.in_features);
+      for (uint32_t j = 0; j < layer.out_features; j++) {
+        layer.basis_weights(j, i) = inv_sqrt_in_features + random_uniform(0.1);
+        layer.spline_weights(j, i) = 1;
+
+        for (uint32_t k = 0; k < num_bases; k++) {
+          layer.coeff(j, i, k) = random_uniform(spline_noise);
+        }
+      }
+    }
+
+    std::cout << layer.basis_weights << std::endl;
+    std::cout << layer.spline_weights << std::endl;
+    // std::cout << bases << std::endl;
+    // std::cout << layer.coeff << std::endl;
+
+    LAPACKE_sgels(LAPACK_COL_MAJOR, 'T', num_bases, num_bases,
+                  layer.in_features * layer.out_features, bases.data, num_bases,
+                  layer.coeff.data, num_bases);
+
+    // std::cout << "solution\n";
+    // std::cout << layer.coeff << std::endl;
+
+    for (uint32_t i = 0; i < layer.out_features; i++)
+      layer.biases(i) = 0;
+  }
 }
 
 KANNet KANNet_create(std::vector<uint32_t> widths,
@@ -199,6 +264,7 @@ KANNet KANNet_create(std::vector<uint32_t> widths,
   KANNet net;
   net.num_layers = widths.size() - 1;
   net.spline_order = spline_order;
+  net.grid_size = grid_size;
   uint32_t num_bases = grid_size + spline_order;
   uint32_t activations_size = 0;
   uint32_t max_width = widths[0];
@@ -243,6 +309,9 @@ KANNet KANNet_create(std::vector<uint32_t> widths,
     KANLayer_init(net.layers[l], widths[l], widths[l + 1], num_bases, params,
                   params_grad, activations);
   }
+
+  if (!params_data)
+    KANNet_weight_init(net);
 
   return net;
 }
