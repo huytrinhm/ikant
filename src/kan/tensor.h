@@ -33,6 +33,7 @@ struct Tensor {
 
 std::ostream& operator<<(std::ostream& os, const Tensor& tensor);
 
+Tensor tensor_from_filestream(std::ifstream& file);
 Tensor tensor_from_file(const char* filename);
 
 void tensor_to_file(Tensor& tensor, const char* filename);

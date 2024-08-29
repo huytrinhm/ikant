@@ -108,6 +108,29 @@ std::ostream& operator<<(std::ostream& os, const Tensor& tensor) {
   return os;
 }
 
+Tensor tensor_from_filestream(std::ifstream& fin) {
+  Tensor result;
+  fin.read(reinterpret_cast<char*>(&result.dim), sizeof(uint32_t));
+
+  result.shape = new uint32_t[result.dim];
+  result.stride = new uint32_t[result.dim];
+
+  fin.read(reinterpret_cast<char*>(result.shape),
+           result.dim * sizeof(uint32_t));
+  fin.read(reinterpret_cast<char*>(result.stride),
+           result.dim * sizeof(uint32_t));
+
+  uint32_t num_elements = 1;
+  for (uint32_t i = 0; i < result.dim; ++i) {
+    num_elements *= result.shape[i];
+  }
+
+  result.data = new float[num_elements];
+  fin.read(reinterpret_cast<char*>(result.data), num_elements * sizeof(float));
+
+  return result;
+}
+
 Tensor tensor_from_file(const char* filename) {
   std::ifstream fin(filename, std::ios::binary);
   if (!fin.is_open()) {

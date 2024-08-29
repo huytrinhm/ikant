@@ -2,6 +2,7 @@
 #define GUI_H
 
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -11,6 +12,8 @@
 
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
+
+#include "tinyfiledialogs.h"
 
 #include "../kan/kan.h"
 #include "../kan/spline.h"
@@ -390,6 +393,26 @@ void DrawKANSplines(
   }
 }
 
+void HandleLoadCheckpoint(
+    KAN::KANNet& net,
+    std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<float>>& min_act,
+    std::vector<std::vector<float>>& max_act,
+    std::atomic<int>& currentEpoch,
+    float& loss) {
+  char* filename =
+      tinyfd_openFileDialog("Load Checkpoint...", "", 0, NULL, NULL, 0);
+  if (!filename)
+    return;
+  uint32_t num_layers, spline_order, grid_size, *widths;
+  float* params_data;
+  KAN::KANNet_load_checkpoint(filename, num_layers, spline_order, grid_size,
+                              widths, params_data);
+  net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
+                           spline_order, grid_size, params_data);
+  InitKANNet(net, splinesData, min_act, max_act, currentEpoch, loss);
+}
+
 void DrawMenuGUI(
     float panelWidth,
     float panelX,
@@ -416,13 +439,8 @@ void DrawMenuGUI(
   panelY += 50;
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Load Checkpoint")) {
-    uint32_t num_layers, spline_order, grid_size, *widths;
-    float* params_data;
-    KAN::KANNet_load_checkpoint("checkpoint2.dat", num_layers, spline_order,
-                                grid_size, widths, params_data);
-    net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
-                             spline_order, grid_size, params_data);
-    InitKANNet(net, splinesData, min_act, max_act, currentEpoch, loss);
+    HandleLoadCheckpoint(net, splinesData, min_act, max_act, currentEpoch,
+                         loss);
   }
   panelY += 50;
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
@@ -577,6 +595,24 @@ void RunTraining(
   training = false;
 }
 
+void HandleLoadData(KAN::Tensor& X, KAN::Tensor& y) {
+  char* filename = tinyfd_openFileDialog("Load Data...", "", 0, NULL, NULL, 0);
+  if (!filename)
+    return;
+  std::ifstream file(filename, std::ios::binary);
+  X = KAN::tensor_from_filestream(file);
+  y = KAN::tensor_from_filestream(file);
+  file.close();
+}
+
+void HandleSaveCheckpoint(KAN::KANNet& net) {
+  char* filename =
+      tinyfd_saveFileDialog("Save Checkpoint...", "", 0, NULL, NULL);
+  if (!filename)
+    return;
+  KAN::KANNet_save_checkpoint(net, filename);
+}
+
 void DrawTrainGUI(
     float panelWidth,
     float panelX,
@@ -595,8 +631,7 @@ void DrawTrainGUI(
     std::mutex& splinesDataMutex) {
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Load Data")) {
-    X = KAN::tensor_from_file("x.dat");
-    y = KAN::tensor_from_file("y.dat");
+    HandleLoadData(X, y);
   }
   panelY += 50;
 
@@ -694,7 +729,7 @@ void DrawTrainGUI(
 
   if (GuiButton(Rectangle{panelX + 10, panelY, panelWidth - 20, 40},
                 "Save Checkpoint")) {
-    // TODO: Implement saving the checkpoint
+    HandleSaveCheckpoint(net);
   }
   panelY += 50;
 
