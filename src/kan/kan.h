@@ -34,6 +34,8 @@ struct KANLayer {
 
   Tensor activations;   // out
   Tensor partial_grad;  // out
+
+  Tensor mask;  // out
 };
 
 struct KANNet {

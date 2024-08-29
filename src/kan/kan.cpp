@@ -110,6 +110,10 @@ void KANLayer_init(KANLayer& layer,
 
   layer.activations = Tensor({out_features}, activations);
   activations += out_features;
+
+  layer.mask = Tensor({out_features});
+  for (uint32_t i = 0; i < out_features; i++)
+    layer.mask(i) = 1;
 }
 
 void KANNet_load_checkpoint(const char* filename,
@@ -354,7 +358,7 @@ void KANLayer_neuron_forward(KANLayer& layer,
 
     float edge_act = layer.spline_weights(i, j) * layer.splines(i, j) +
                      layer.basis_weights(i, j) * layer.residuals(j);
-    layer.edge_activations(i, j) += std::fabs(edge_act);
+    layer.edge_activations(i, j) += layer.mask(i) * std::fabs(edge_act);
     layer.activations(i) += edge_act;
   }
 
@@ -374,6 +378,7 @@ void KANLayer_forward(KANLayer& layer,
 
   for (uint32_t i = 0; i < layer.out_features; ++i) {
     KANLayer_neuron_forward(layer, spline_order, i);
+    layer.activations(i) *= layer.mask(i);
   }
 }
 
@@ -393,17 +398,17 @@ void KANLayer_backward(KANLayer& layer,
                        uint32_t spline_order,
                        float lambda) {
   for (uint32_t i = 0; i < layer.out_features; ++i) {
-    layer.biases_grad(i) += layer.partial_grad(i) - lambda;
+    layer.biases_grad(i) += layer.mask(i) * (layer.partial_grad(i) - lambda);
 
     for (uint32_t j = 0; j < layer.in_features; ++j) {
       layer.basis_weights_grad(i, j) +=
-          layer.partial_grad(i) * layer.residuals(j);
+          layer.mask(i) * layer.partial_grad(i) * layer.residuals(j);
 
       layer.spline_weights_grad(i, j) +=
-          layer.partial_grad(i) * layer.splines(i, j);
+          layer.mask(i) * layer.partial_grad(i) * layer.splines(i, j);
 
       for (uint32_t b = 0; b < layer.bases.shape[1]; ++b) {
-        layer.coeff_grad(i, j, b) += layer.partial_grad(i) *
+        layer.coeff_grad(i, j, b) += layer.mask(i) * layer.partial_grad(i) *
                                      layer.spline_weights(i, j) *
                                      layer.bases(j, b);
       }
@@ -419,9 +424,10 @@ void KANLayer_backward(KANLayer& layer,
 
   for (uint32_t j = 0; j < layer.in_features; ++j) {
     for (uint32_t i = 0; i < layer.out_features; ++i) {
-      (*next_grad)(j) += layer.partial_grad(i) * layer.basis_weights(i, j) *
-                             SiLU_derivative(inputs(j)) +
-                         lambda;
+      (*next_grad)(j) +=
+          layer.mask(i) * (layer.partial_grad(i) * layer.basis_weights(i, j) *
+                               SiLU_derivative(inputs(j)) +
+                           lambda);
     }
   }
 }

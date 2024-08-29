@@ -168,7 +168,8 @@ std::vector<std::vector<Node>> InitKANCanvas(KAN::KANNet& net,
   return InitKANCanvas(widths, x, y, canvasWidth, canvasHeight);
 }
 
-void DrawKANNet(std::vector<std::vector<Node>>& layers,
+void DrawKANNet(KAN::KANNet& net,
+                std::vector<std::vector<Node>>& layers,
                 std::vector<std::vector<std::vector<float>>>& splinesAlpha,
                 Camera2D& camera,
                 Vector2 mousePosition) {
@@ -207,9 +208,26 @@ void DrawKANNet(std::vector<std::vector<Node>>& layers,
   for (int i = 0; i < layers.size(); i++) {
     for (int j = 0; j < layers[i].size(); j++) {
       Node node = layers[i][j];
+      Vector2 worldMousePosition =
+          Vector2Subtract(mousePosition, camera.offset);
+      worldMousePosition = Vector2Scale(worldMousePosition, 1.0f / camera.zoom);
+      worldMousePosition = Vector2Add(worldMousePosition, camera.target);
       // Draw the nodes (circles for even layers, squares for odd layers)
       if (i % 2 == 0) {
-        DrawCircleV(node.position, 15, BLACK);  // Increased circle size
+        Color color =
+            (i == 0)
+                ? BLACK
+                : Color{0, 0, 0,
+                        (unsigned char)(net.layers[i / 2 - 1].mask(j) * 127 +
+                                        128)};
+        DrawCircleV(node.position, 15, color);  // Increased circle size
+        if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) &&
+            IsMouseOverRectangle(worldMousePosition, node.position, 30) &&
+            i != 0 && i != layers.size() - 1) {
+          std::cout << "Circle node clicked at: (" << i / 2 - 1 << ", " << j
+                    << ")\n";
+          net.layers[i / 2 - 1].mask(j) = 1 - net.layers[i / 2 - 1].mask(j);
+        }
       } else {
         // Draw the square with a white fill and black border
         DrawRectangle(
@@ -237,12 +255,6 @@ void DrawKANNet(std::vector<std::vector<Node>>& layers,
                                             [j / layers[i + 1].size()]),
             });
         // Check for click on this square
-        Vector2 worldMousePosition =
-            Vector2Subtract(mousePosition, camera.offset);
-        worldMousePosition =
-            Vector2Scale(worldMousePosition, 1.0f / camera.zoom);
-        worldMousePosition = Vector2Add(worldMousePosition, camera.target);
-
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
             IsMouseOverRectangle(worldMousePosition, node.position,
                                  squareSize)) {
@@ -355,7 +367,7 @@ void DrawSpline(
 }
 
 float scoreToAlpha(float score) {
-  float alpha = std::tanh(1.5 * score);
+  float alpha = std::tanh(2.5 * score);
   return alpha;
 }
 
