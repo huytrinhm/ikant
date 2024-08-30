@@ -70,7 +70,7 @@ int main() {
     Vector2 mousePosition = GetMousePosition();
     inBound = CheckCollisionPointRec(mousePosition,
                                      {0, 0, canvasWidth, screenHeight});
-    if (inBound) {
+    if (inBound && !popupState.opened) {
       // Handle panning
       if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         isDragging = true;
@@ -147,6 +147,8 @@ int main() {
       default:
         break;
     }
+
+    DrawKANSplinePopup(net, splinesData, min_act, max_act, splinesDataMutex);
     //------------------------------------------------------------------------------
 
     DrawFPS(10, 10);

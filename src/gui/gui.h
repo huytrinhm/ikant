@@ -36,7 +36,15 @@ struct EditState {
   std::vector<int32_t> widths;
 };
 
+struct PopupState {
+  bool opened;
+  uint32_t l;
+  uint32_t i;
+  uint32_t j;
+};
+
 EditState editState;
+PopupState popupState;
 
 bool IsMouseOverRectangle(Vector2 mousePosition,
                           Vector2 nodePosition,
@@ -93,6 +101,8 @@ void InitKANNet(
 
   currentEpoch = 0;
   loss = -1;
+
+  popupState.opened = false;
 
   CalcSplineData(net, splinesData, splinesAlpha, min_act, max_act, false);
 }
@@ -226,7 +236,8 @@ void DrawKANNet(KAN::KANNet& net,
         DrawCircleV(node.position, 15, color);  // Increased circle size
         if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) &&
             IsMouseOverRectangle(worldMousePosition, node.position, 30) &&
-            i != 0 && i != layers.size() - 1 && !isEditing) {
+            i != 0 && i != layers.size() - 1 && !isEditing &&
+            !popupState.opened) {
           std::cout << "Circle node clicked at: (" << i / 2 - 1 << ", " << j
                     << ")\n";
           net.layers[i / 2 - 1].mask(j) = 1 - net.layers[i / 2 - 1].mask(j);
@@ -261,9 +272,14 @@ void DrawKANNet(KAN::KANNet& net,
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
             IsMouseOverRectangle(worldMousePosition, node.position,
                                  squareSize) &&
-            !isEditing) {
-          std::cout << "Square node clicked at: (" << node.position.x << ", "
-                    << node.position.y << ")\n";
+            !isEditing && !popupState.opened) {
+          // std::cout << "Square node clicked at: (" << node.position.x << ", "
+          //           << node.position.y << ")\n";
+
+          popupState.opened = true;
+          popupState.l = i / 2;
+          popupState.i = j % layers[i + 1].size();
+          popupState.j = j / layers[i + 1].size();
         }
       }
     }
@@ -323,6 +339,49 @@ RenderTexture DrawSineCurveToTexture(int textureWidth, int textureHeight) {
   EndTextureMode();  // Stop drawing to the texture
 
   return texture;
+}
+
+void DrawSpline(
+    Rectangle bound,
+    uint32_t l,
+    uint32_t i,
+    uint32_t j,
+    std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<float>>& min_act,
+    std::vector<std::vector<float>>& max_act,
+    std::mutex& splinesDataMutex) {
+  splinesDataMutex.lock();
+  // std::cout << l << i << j << std::endl;
+  float x = bound.x + 4;
+  float y = bound.y + 4;
+  float w = bound.width - 8;
+  float h = bound.height - 8;
+
+  float minX = min_act[l][j];
+  float maxX = max_act[l][j];
+  float minY = splinesData[l][j][i][0];
+  float maxY = splinesData[l][j][i][0];
+
+  for (uint32_t k = 0; k < splineNumPoints; k++) {
+    minY = std::min(minY, splinesData[l][j][i][k]);
+    maxY = std::max(maxY, splinesData[l][j][i][k]);
+  }
+
+  // Loop to draw the spline
+  for (uint32_t k = 0; k < splineNumPoints - 1; k++) {
+    // Calculate current and next point positions
+    float currentX = x + (w / ((float)splineNumPoints - 1)) * k;
+    float nextX = x + (w / ((float)splineNumPoints - 1)) * (k + 1);
+
+    float currentY =
+        y + h - (splinesData[l][j][i][k] - minY) / (maxY - minY) * h;
+    float nextY =
+        y + h - (splinesData[l][j][i][k + 1] - minY) / (maxY - minY) * h;
+
+    // Draw line between the two points
+    DrawLineEx(Vector2{currentX, currentY}, Vector2{nextX, nextY}, 3, RED);
+  }
+  splinesDataMutex.unlock();
 }
 
 void DrawSpline(
@@ -460,6 +519,28 @@ void DrawKANSplines(
       }
     }
   }
+}
+
+void DrawKANSplinePopup(
+    KAN::KANNet& net,
+    std::vector<std::vector<std::vector<std::vector<float>>>>& splinesData,
+    std::vector<std::vector<float>>& min_act,
+    std::vector<std::vector<float>>& max_act,
+    std::mutex& splinesDataMutex) {
+  if (!popupState.opened)
+    return;
+
+  float canvasHeight = GetScreenHeight();
+  float canvasWidth = GetScreenWidth() * canvasRatio;
+  float windowSize = std::min(canvasWidth, canvasHeight) * 0.8f;
+  float windowX = (canvasWidth - windowSize) / 2;
+  float windowY = (canvasHeight - windowSize) / 2;
+  popupState.opened = !GuiWindowBox(
+      Rectangle{windowX, windowY, windowSize, windowSize + 20}, "Spline");
+
+  DrawSpline((Rectangle){windowX, windowY + 20, windowSize, windowSize},
+             popupState.l, popupState.j, popupState.i, splinesData, min_act,
+             max_act, splinesDataMutex);
 }
 
 void HandleLoadCheckpoint(
