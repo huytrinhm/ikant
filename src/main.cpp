@@ -98,7 +98,8 @@ int main() {
     BeginDrawing();
     ClearBackground(RAYWHITE);
     BeginMode2D(camera);
-    DrawKANNet(net, layers, splinesAlpha, camera, mousePosition);
+    DrawKANNet(net, layers, splinesAlpha, camera, mousePosition,
+               kanGuiState == EDIT);
     if (kanGuiState != EDIT)
       DrawKANSplines(layers, net, splinesData, splinesAlpha, min_act, max_act,
                      splinesDataMutex);

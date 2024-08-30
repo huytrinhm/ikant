@@ -172,7 +172,8 @@ void DrawKANNet(KAN::KANNet& net,
                 std::vector<std::vector<Node>>& layers,
                 std::vector<std::vector<std::vector<float>>>& splinesAlpha,
                 Camera2D& camera,
-                Vector2 mousePosition) {
+                Vector2 mousePosition,
+                bool isEditing) {
   // Draw connections
   for (int i = 0; i < layers.size() / 2; i++) {
     int curWidth = layers[2 * i].size();
@@ -180,6 +181,8 @@ void DrawKANNet(KAN::KANNet& net,
     for (int j = 0; j < curWidth; j++) {
       for (int k = 0; k < nextWidth; k++) {
         // std::cout << splinesAlpha[i][k][j] << std::endl;
+        unsigned char alpha =
+            isEditing ? 255 : (unsigned char)(255 * splinesAlpha[i][k][j]);
         DrawLineEx(layers[2 * i][j].position,
                    Vector2Add(layers[2 * i + 1][j * nextWidth + k].position,
                               Vector2{0, squareSize / 2}),
@@ -188,7 +191,7 @@ void DrawKANNet(KAN::KANNet& net,
                        0,
                        0,
                        0,
-                       (unsigned char)(255 * splinesAlpha[i][k][j]),
+                       alpha,
                    });
         DrawLineEx(
             Vector2Subtract(layers[2 * i + 1][j * nextWidth + k].position,
@@ -198,7 +201,7 @@ void DrawKANNet(KAN::KANNet& net,
                 0,
                 0,
                 0,
-                (unsigned char)(255 * splinesAlpha[i][k][j]),
+                alpha,
             });
       }
     }
@@ -215,7 +218,7 @@ void DrawKANNet(KAN::KANNet& net,
       // Draw the nodes (circles for even layers, squares for odd layers)
       if (i % 2 == 0) {
         Color color =
-            (i == 0)
+            (i == 0 || isEditing)
                 ? BLACK
                 : Color{0, 0, 0,
                         (unsigned char)(net.layers[i / 2 - 1].mask(j) * 127 +
@@ -223,41 +226,42 @@ void DrawKANNet(KAN::KANNet& net,
         DrawCircleV(node.position, 15, color);  // Increased circle size
         if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) &&
             IsMouseOverRectangle(worldMousePosition, node.position, 30) &&
-            i != 0 && i != layers.size() - 1) {
+            i != 0 && i != layers.size() - 1 && !isEditing) {
           std::cout << "Circle node clicked at: (" << i / 2 - 1 << ", " << j
                     << ")\n";
           net.layers[i / 2 - 1].mask(j) = 1 - net.layers[i / 2 - 1].mask(j);
         }
       } else {
         // Draw the square with a white fill and black border
-        DrawRectangle(
-            node.position.x - squareSize / 2, node.position.y - squareSize / 2,
-            squareSize, squareSize,
-            Color{
-                255,
-                255,
-                255,
-                (unsigned char)(255 *
-                                splinesAlpha[i / 2][j % layers[i + 1].size()]
-                                            [j / layers[i + 1].size()]),
-            });
-        DrawRectangleLinesEx(
-            (Rectangle){node.position.x - squareSize / 2,
-                        node.position.y - squareSize / 2, squareSize,
-                        squareSize},
-            lineThickness,
-            Color{
-                0,
-                0,
-                0,
-                (unsigned char)(255 *
-                                splinesAlpha[i / 2][j % layers[i + 1].size()]
-                                            [j / layers[i + 1].size()]),
-            });
+        unsigned char alpha =
+            isEditing
+                ? 255
+                : (unsigned char)(255 *
+                                  splinesAlpha[i / 2][j % layers[i + 1].size()]
+                                              [j / layers[i + 1].size()]);
+        DrawRectangle(node.position.x - squareSize / 2,
+                      node.position.y - squareSize / 2, squareSize, squareSize,
+                      Color{
+                          255,
+                          255,
+                          255,
+                          alpha,
+                      });
+        DrawRectangleLinesEx((Rectangle){node.position.x - squareSize / 2,
+                                         node.position.y - squareSize / 2,
+                                         squareSize, squareSize},
+                             lineThickness,
+                             Color{
+                                 0,
+                                 0,
+                                 0,
+                                 alpha,
+                             });
         // Check for click on this square
         if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
             IsMouseOverRectangle(worldMousePosition, node.position,
-                                 squareSize)) {
+                                 squareSize) &&
+            !isEditing) {
           std::cout << "Square node clicked at: (" << node.position.x << ", "
                     << node.position.y << ")\n";
         }
