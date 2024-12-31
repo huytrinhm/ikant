@@ -16,7 +16,7 @@ A simple C++ implementation and visualization of Kolmogorov-Arnold Networks.
 
 ### Prerequisites
 
-- C++ compiler (supporting C++11 or later)
+- C++ compiler
 - Make
 - LAPACK library
 - Raylib library
