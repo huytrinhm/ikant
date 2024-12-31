@@ -48,6 +48,10 @@ After building the project, you can run the application using:
 ./main.exe
 ```
 
+## The checkpoint and data format
+
+You may find the `development.ipynb` notebook helpful in understanding the format of the checkpoint and data files and how to generate them.
+
 ## Acknowledgements
 
 - [pykan](https://github.com/KindXiaoming/pykan/tree/f6ac7e25ed4cd99aba2b9c883d1cf25f959f6ac4): The original Python implementation of Kolmogorov-Arnold Networks. The project at the linked commit was used as a reference for this C++ implementation.
