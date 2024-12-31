@@ -2,7 +2,7 @@
 
 A simple C++ implementation and visualization of Kolmogorov-Arnold Networks.
 
-![Screenshot](screenshot.png)
+![Screenshot](screenshot/demo.png)
 
 ## Features
 
