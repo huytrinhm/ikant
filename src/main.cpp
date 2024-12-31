@@ -18,7 +18,7 @@ std::mutex splinesDataMutex;
 int main() {
   uint32_t num_layers, spline_order, grid_size, *widths;
   float* params_data;
-  KAN::KANNet_load_checkpoint("checkpoint2.dat", num_layers, spline_order,
+  KAN::KANNet_load_checkpoint("checkpoint.dat", num_layers, spline_order,
                               grid_size, widths, params_data);
   net = KAN::KANNet_create(std::vector(widths, widths + num_layers + 1),
                            spline_order, grid_size, params_data);
