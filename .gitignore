@@ -1,3 +1,1 @@
-include/Eigen/*
-!copy_directory_content_here
 build/

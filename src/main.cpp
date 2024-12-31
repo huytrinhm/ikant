@@ -27,7 +27,7 @@ int main() {
 
   // Initialization
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-  InitWindow(1200, 800, "Dynamic Network Example");
+  InitWindow(1200, 800, "KAN Visualizer");
   SetTargetFPS(60);
   GuiSetStyle(DEFAULT, TEXT_SIZE, 20);
 
